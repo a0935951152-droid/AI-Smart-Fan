@@ -1,7 +1,6 @@
 import time
 import os
 from faster_whisper import WhisperModel
-# 🚀 拋棄 transformers，擁抱地表最強邊緣運算引擎
 from llama_cpp import Llama
 
 class VoiceBrain:
@@ -9,19 +8,15 @@ class VoiceBrain:
                  gguf_path="weights/qwen/qwen2.5-0.5b-instruct-q8_0.gguf"):
         print("==================================================")
         print(f"👂 [Voice] 正在載入耳朵 ({whisper_model})...")
-        # Faster-Whisper 底層也是 CTranslate2 (C++)，我們保留它
         self.whisper = WhisperModel(whisper_model, device="cpu", compute_type="int8")
         
         print(f"🧠 [Brain] 正在載入 llama.cpp 量化大腦 ({os.path.basename(gguf_path)})...")
         try:
-            # 🚀 啟動 Llama 引擎！
-            # n_threads=4: 榨乾樹莓派的 4 顆核心
-            # n_ctx=512: 限制上下文長度節省記憶體
             self.llm = Llama(
                 model_path=gguf_path,
                 n_threads=4,
                 n_ctx=512,
-                verbose=False # 關閉底層 C++ 的落落長日誌
+                verbose=False 
             )
             print("✅ [Brain] C++ 引擎驅動之語音與大腦系統載入完成！")
         except Exception as e:
@@ -48,28 +43,14 @@ class VoiceBrain:
 
         user_content = f"【狀態】馬達:{current_angle}度,人數:{p_count},位置:{target_pos}【語音】{text}"
 
-        # 🌟 擴充錯字字典，並加入 CENTER (回正) 指令
+        # 🌟 1. 極簡化 Prompt：去除多餘字數，大幅減輕 Pi 3 閱讀負擔，提升推論速度
         messages = [
-            {"role": "system", "content": "你是風扇控制晶片。嚴禁廢話。只能輸出: POWER_ON, POWER_OFF, TRACK_ON, TRACK_OFF, AVOID, TURN_LEFT, TURN_RIGHT, OSCILLATE_ON, OSCILLATE_OFF, CENTER, IGNORE"},
+            {"role": "system", "content": "你是風扇晶片。僅輸出: POWER_ON, POWER_OFF, TRACK_ON, TRACK_OFF, AVOID, TURN_LEFT, TURN_RIGHT, OSCILLATE_ON, OSCILLATE_OFF, CENTER, IGNORE"},
             {"role": "user", "content": "【狀態】馬達:15度,人數:1,位置:畫面偏右【語音】轉到旁邊去"},
             {"role": "assistant", "content": "AVOID"},
-            {"role": "user", "content": "【狀態】馬達:0度,人數:0,位置:沒看到人【語音】幫我開風扇"},
-            {"role": "assistant", "content": "POWER_ON"},
-            {"role": "user", "content": "【狀態】馬達:60度,人數:0,位置:沒看到人【語音】開啟追蹤"},
-            {"role": "assistant", "content": "TRACK_ON"},
-            # 👇 針對 Whisper 的空耳錯字進行特訓
+            # 保留最核心的防呆範例
             {"role": "user", "content": "【狀態】馬達:60度,人數:0,位置:沒看到人【語音】關閉風陣"},
             {"role": "assistant", "content": "POWER_OFF"},
-            {"role": "user", "content": "【狀態】馬達:60度,人數:0,位置:沒看到人【語音】開啟冒陷队"},
-            {"role": "assistant", "content": "POWER_ON"},
-            {"role": "user", "content": "【狀態】馬達:60度,人數:0,位置:沒看到人【語音】崩散吹我"},
-            {"role": "assistant", "content": "TRACK_ON"},
-            {"role": "user", "content": "【狀態】馬達:60度,人數:0,位置:沒看到人【語音】回到中央"},
-            {"role": "assistant", "content": "CENTER"},
-            {"role": "user", "content": "【狀態】馬達:60度,人數:0,位置:沒看到人【語音】完畢"},
-            {"role": "assistant", "content": "IGNORE"},
-            {"role": "user", "content": "【狀態】馬達:60度,人數:0,位置:沒看到人【語音】1T,5,3"},
-            {"role": "assistant", "content": "IGNORE"},
             {"role": "user", "content": user_content} 
         ]
         
@@ -86,18 +67,32 @@ class VoiceBrain:
         response = result["choices"][0]["message"]["content"].strip().upper()
         print(f"⏱️ [Brain] Llama.cpp 推論耗時 {time.time()-t0:.2f}s | 原始決策: {response}")
         
-        # 🌟 終極攔截網：如果大腦還是發神經，我們直接掃描語音文字來補救！
+        # 🌟 2. 終極攔截網 2.0：優先比對「複合詞」，再比對「單字」，徹底解決誤殺問題
         check_text = response + " " + text
         
-        if "關閉追蹤" in check_text or "停指追蹤" in check_text: return "TRACK_OFF"
-        elif "追蹤" in check_text or "跟著" in check_text or "吹我" in check_text: return "TRACK_ON"
-        elif "關" in check_text or "停" in check_text: return "POWER_OFF"
-        elif "開" in check_text: return "POWER_ON"
-        elif "中央" in check_text or "回正" in check_text: return "CENTER"
-        elif "擺頭" in check_text or "旋轉" in check_text: return "OSCILLATE_ON"
-        elif "避" in check_text or "旁" in check_text: return "AVOID"
-        elif "左" in check_text: return "TURN_LEFT"
-        elif "右" in check_text: return "TURN_RIGHT"
+        # 第一層：最長/最明確的指令優先攔截
+        if any(w in check_text for w in ["停止追蹤", "關閉追蹤", "取消追蹤", "停指追蹤", "追蹤停止", "停止最終"]): 
+            return "TRACK_OFF"
+        elif any(w in check_text for w in ["回到中央", "回正", "中間"]): 
+            return "CENTER"
+            
+        # 第二層：動作單字攔截
+        elif any(w in check_text for w in ["追蹤", "跟著", "吹我"]): 
+            return "TRACK_ON"
+        elif any(w in check_text for w in ["關", "停"]): 
+            return "POWER_OFF"
+        elif any(w in check_text for w in ["開", "啟動"]): 
+            return "POWER_ON"
+        elif any(w in check_text for w in ["擺頭", "旋轉"]): 
+            return "OSCILLATE_ON"
+        elif any(w in check_text for w in ["避", "旁"]): 
+            return "AVOID"
+        elif "左" in check_text: 
+            return "TURN_LEFT"
+        elif "右" in check_text: 
+            return "TURN_RIGHT"
+            
+        # 第三層：信任大腦的合法輸出
         elif response in ["POWER_ON", "POWER_OFF", "TRACK_ON", "TRACK_OFF", "AVOID", "TURN_LEFT", "TURN_RIGHT", "OSCILLATE_ON", "OSCILLATE_OFF", "CENTER", "IGNORE"]:
             return response
             

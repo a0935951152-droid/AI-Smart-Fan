@@ -279,12 +279,12 @@ if __name__ == '__main__':
                 else: motor.rotate(turn_right=True, degrees=60)
 
             # 🌟 新增：回到正中央的動作
-            elif decision == "CENTER" and sys_power:
+            elif decision == "CENTER":
                 sys_tracking = False
                 sys_oscillating = False
                 sys_status_text = "Voice: Center"
                 print("\n🏃‍♂️ [總管] 收到回正指令，馬達歸零中...")
-                motor.center() # 呼叫馬達控制器的歸零函數
+                motor.center()
 
             elif decision == "TURN_LEFT" and sys_power:
                 sys_tracking = False
